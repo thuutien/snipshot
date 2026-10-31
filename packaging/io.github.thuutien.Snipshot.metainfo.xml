@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.thuutien.Snipshot</id>
+  <name>Snipshot</name>
+  <summary>Snip part of your screen and mark it up</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <developer id="io.github.thuutien">
+    <name>Bryan Tran</name>
+  </developer>
+  <description>
+    <p>
+      Snipshot is a snipping tool for Linux, modeled on the Windows Snipping Tool.
+      Snip a rectangle, a window, a freeform shape or the whole screen, then mark
+      it up and copy or save it.
+    </p>
+    <ul>
+      <li>Rectangle, window, freeform and full-screen snips, with an optional delay</li>
+      <li>Pen, highlighter, shapes (rectangle, oval, line, arrow) and text</li>
+      <li>Eraser, crop, undo and redo, zoom</li>
+      <li>Copies to the clipboard and saves to your Pictures folder automatically</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.thuutien.Snipshot.desktop</launchable>
+  <url type="homepage">https://github.com/thuutien/snipshot</url>
+  <url type="bugtracker">https://github.com/thuutien/snipshot/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Marking up a snip</caption>
+      <image>https://raw.githubusercontent.com/thuutien/snipshot/main/docs/screenshot.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.1" date="2026-10-31"/>
+  </releases>
+</component>

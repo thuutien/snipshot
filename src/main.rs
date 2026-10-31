@@ -62,7 +62,9 @@ fn main() -> eframe::Result {
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("Snipshot")
-        .with_app_id("snipshot")
+        // Inside a Flatpak the app id must match the exported desktop file so
+        // docks and window lists show the right icon.
+        .with_app_id(std::env::var("FLATPAK_ID").unwrap_or_else(|_| "snipshot".to_owned()))
         .with_inner_size([600.0, 210.0])
         .with_min_inner_size([520.0, 180.0])
         .with_icon(app_icon());

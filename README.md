@@ -1,6 +1,14 @@
-# Snipshot
+<p align="center">
+  <img src="assets/snipshot-256.png" alt="Snipshot icon" width="112">
+</p>
 
-A snipping tool for Linux, modeled on the Windows Snipping Tool, written in Rust with [egui](https://github.com/emilk/egui).
+<h1 align="center">Snipshot</h1>
+
+<p align="center">
+  A snipping tool for Linux, modeled on the Windows Snipping Tool, written in Rust with <a href="https://github.com/emilk/egui">egui</a>.
+</p>
+
+![Snipshot marking up a snip with a rectangle, an arrow, a highlight and a text label](docs/screenshot.png)
 
 ## Features
 
@@ -27,7 +35,21 @@ On Cinnamon, open **Keyboard → Shortcuts → Custom Shortcuts** and bind e.g. 
 
 ## Install
 
-Download `snipshot-<version>-x86_64-linux.tar.gz` from the [latest release](https://github.com/thuutien/snipshot/releases/latest), unpack it and run the install script. It installs the binary to `~/.local/bin`, plus the app icon and an app-menu entry:
+Download a package from the [latest release](https://github.com/thuutien/snipshot/releases/latest). The prebuilt packages are for x86_64.
+
+**Debian, Ubuntu, Linux Mint** (`.deb`, needs Ubuntu 24.04+, Mint 22+ or Debian 13):
+
+```bash
+sudo apt install ./snipshot_*_amd64.deb
+```
+
+**Any distro with Flatpak** (`.flatpak`; the Freedesktop runtime is fetched from Flathub if needed):
+
+```bash
+flatpak install --user ./snipshot-*-x86_64.flatpak
+```
+
+**Tarball** (`.tar.gz`, needs glibc 2.39+). It installs to `~/.local/bin`, plus the app icon and an app-menu entry:
 
 ```bash
 tar xzf snipshot-*-x86_64-linux.tar.gz
@@ -35,16 +57,18 @@ cd snipshot-*-x86_64-linux
 packaging/install.sh
 ```
 
-From source:
+**From source:**
 
 ```bash
 cargo build --release
 packaging/install.sh
 ```
 
+`SHA256SUMS` in each release lists the checksums of the files. To build all three packages yourself, run `packaging/build-packages.sh` (needs `dpkg-deb`, `flatpak` and the `org.freedesktop.Platform//25.08` runtime).
+
 ## Updates
 
-Snipshot checks GitHub releases of the repository in `Cargo.toml` (`repository = ...`) at most once a day, and shows a banner when a newer version is published. Turn it off, or check by hand, in the `•••` menu. To publish an update, bump `version` in `Cargo.toml` and create a GitHub release tagged like `v0.2.0`.
+Snipshot checks GitHub releases of the repository in `Cargo.toml` (`repository = ...`) at most once a day, and shows a banner when a newer version is published. Turn it off, or check by hand, in the `•••` menu. To publish an update, bump `version` in `Cargo.toml` and create a GitHub release tagged like `v0.2.0`. To update, download and install the new package the same way as the first time.
 
 ## Keyboard shortcuts
 
@@ -80,4 +104,5 @@ Snipshot checks GitHub releases of the repository in `Cargo.toml` (`repository =
 | `src/icons.rs` | Toolbar icons drawn in code |
 | `src/settings.rs` | Settings in `~/.config/snipshot/settings.conf` |
 | `assets/` | App icon (SVG source and 256 px PNG) |
-| `packaging/` | Desktop entry and per-user install script |
+| `packaging/` | Desktop entry, AppStream metadata, install script, package builder |
+| `docs/` | README screenshot |
