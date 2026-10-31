@@ -1,0 +1,25 @@
+[package]
+name = "snipshot"
+version = "0.1.1"
+edition = "2024"
+description = "A snipping tool for Linux: snip part of your screen and mark it up"
+repository = "https://github.com/thuutien/snipshot"
+
+[dependencies]
+ab_glyph = "0.2.32"
+arboard = { version = "3.7.0", features = ["wayland-data-control"] }
+ashpd = { version = "0.13.13", features = ["screenshot"] }
+chrono = "0.4.45"
+dirs = "7.0.0"
+eframe = "0.37.0"
+epaint_default_fonts = "0.37.0"
+image = "0.25.10"
+raw-window-handle = "0.6.2"
+rfd = "0.17.2"
+serde_json = "1.0.154"
+tokio = { version = "1.54.1", features = ["rt"] }
+ureq = "3.5.0"
+x11rb = { version = "0.14.0", features = ["randr"] }
+
+[profile.release]
+strip = true

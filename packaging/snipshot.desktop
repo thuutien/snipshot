@@ -1,0 +1,24 @@
+[Desktop Entry]
+Type=Application
+Name=Snipshot
+GenericName=Screenshot Tool
+Comment=Snip part of your screen and mark it up
+Exec=snipshot
+Icon=snipshot
+Terminal=false
+Categories=Utility;
+Keywords=screenshot;snip;capture;screen;
+StartupWMClass=snipshot
+Actions=Rectangle;Window;Fullscreen;
+
+[Desktop Action Rectangle]
+Name=Rectangle snip
+Exec=snipshot --rect
+
+[Desktop Action Window]
+Name=Window snip
+Exec=snipshot --window
+
+[Desktop Action Fullscreen]
+Name=Full-screen snip
+Exec=snipshot --fullscreen

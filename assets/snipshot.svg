@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#6D28D9"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#1E1B4B" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <!-- Tile -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)"/>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#sheen)"/>
+  <g filter="url(#shadow)">
+    <!-- The snipped area -->
+    <rect x="150" y="150" width="212" height="212" rx="22" fill="#FFFFFF" fill-opacity="0.2"/>
+    <!-- Selection corners -->
+    <g fill="none" stroke="#FFFFFF" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M110 196V146q0-36 36-36h50"/>
+      <path d="M316 110h50q36 0 36 36v50"/>
+      <path d="M402 316v50q0 36-36 36h-50"/>
+      <path d="M196 402h-50q-36 0-36-36v-50"/>
+    </g>
+    <!-- Markup stroke -->
+    <path d="M178 304c38-4 58-62 96-64s36 54 70 44" fill="none" stroke="#FBBF24" stroke-width="30" stroke-linecap="round"/>
+  </g>
+</svg>
