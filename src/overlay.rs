@@ -193,7 +193,7 @@ fn dim_around(painter: &Painter, screen: Rect, hole: Rect) {
 }
 
 fn size_label(painter: &Painter, hole: Rect, screen: Rect, text: &str) {
-    let font = FontId::proportional(13.0);
+    let font = FontId::proportional(15.0);
     let above = hole.top() - 22.0 > screen.top();
     let (pos, anchor) = if above {
         (hole.left_top() - vec2(0.0, 6.0), Align2::LEFT_BOTTOM)

@@ -17,7 +17,8 @@ use crate::editor::{Action, Editor};
 use crate::icons::Icon;
 use crate::overlay::{ACCENT, Outcome, Overlay};
 use crate::raise;
-use crate::settings::Settings;
+use crate::settings::{Settings, Theme};
+use crate::style;
 use crate::updater::{self, UpdateStatus};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -55,7 +56,7 @@ impl SnipMode {
 }
 
 const DELAYS: [u32; 4] = [0, 3, 5, 10];
-const HOME_SIZE: Vec2 = vec2(600.0, 210.0);
+const HOME_SIZE: Vec2 = vec2(700.0, 240.0);
 
 fn delay_label(seconds: u32) -> String {
     if seconds == 0 { "No delay".to_owned() } else { format!("{seconds} s delay") }
@@ -122,6 +123,10 @@ impl SnipApp {
             app.exit_on_cancel = true;
         }
         app
+    }
+
+    pub fn theme(&self) -> Theme {
+        self.settings.theme
     }
 
     fn start_snip(&mut self, ctx: &egui::Context) {
@@ -358,17 +363,17 @@ impl SnipApp {
         let mut new_snip = false;
         let mut action = None;
         ui.horizontal(|ui| {
-            ui.set_min_height(34.0);
+            ui.set_min_height(40.0);
             let new = Button::new(RichText::new("+  New").color(Color32::WHITE).strong())
                 .fill(ACCENT)
-                .min_size(vec2(76.0, 30.0))
+                .min_size(vec2(88.0, 36.0))
                 .corner_radius(6);
             if ui.add(new).on_hover_text("New snip (Ctrl+N)").clicked() {
                 new_snip = true;
             }
             egui::ComboBox::from_id_salt("snip-mode")
                 .selected_text(self.mode.label())
-                .width(110.0)
+                .width(130.0)
                 .show_ui(ui, |ui| {
                     for mode in SnipMode::ALL {
                         ui.selectable_value(&mut self.mode, mode, mode.label());
@@ -378,7 +383,7 @@ impl SnipApp {
                 .on_hover_text("Snip mode");
             egui::ComboBox::from_id_salt("snip-delay")
                 .selected_text(delay_label(self.delay))
-                .width(100.0)
+                .width(115.0)
                 .show_ui(ui, |ui| {
                     for delay in DELAYS {
                         ui.selectable_value(&mut self.delay, delay, delay_label(delay));
@@ -403,7 +408,7 @@ impl SnipApp {
     }
 
     fn settings_menu(&mut self, ui: &mut Ui) {
-        ui.menu_button(RichText::new("•••").strong(), |ui| {
+        ui.menu_button(RichText::new("•••").strong().size(18.0), |ui| {
             let mut changed = false;
             changed |= ui.checkbox(&mut self.settings.copy_to_clipboard, "Copy snips to the clipboard automatically").changed();
             changed |= ui.checkbox(&mut self.settings.auto_save, "Save snips automatically").changed();
@@ -417,6 +422,16 @@ impl SnipApp {
                 }
             });
             changed |= ui.checkbox(&mut self.settings.check_for_updates, "Check for updates automatically").changed();
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label("Theme");
+                for theme in Theme::ALL {
+                    if ui.selectable_value(&mut self.settings.theme, theme, theme.label()).changed() {
+                        style::set_theme(ui.ctx(), theme);
+                        changed = true;
+                    }
+                }
+            });
             ui.separator();
             ui.horizontal(|ui| {
                 ui.label(RichText::new(format!("Snipshot {}", updater::current_version())).weak());
@@ -455,8 +470,8 @@ impl SnipApp {
 
     fn home(&self, ui: &mut Ui) {
         ui.vertical_centered(|ui| {
-            ui.add_space(ui.available_height() / 2.0 - 34.0);
-            ui.label(RichText::new("Select the snip mode, then click New to start a snip.").size(15.0));
+            ui.add_space(ui.available_height() / 2.0 - 40.0);
+            ui.label(RichText::new("Select the snip mode, then click New to start a snip.").size(18.0));
             ui.add_space(6.0);
             ui.label(
                 RichText::new("Tip: bind a keyboard shortcut to `snipshot --rect` to snip instantly.").weak(),
@@ -521,8 +536,11 @@ impl eframe::App for SnipApp {
             Screen::Editor(editor) => {
                 egui::Panel::top("tool-options").show(ui, |ui| editor.options_bar(ui));
                 egui::Panel::bottom("status").show(ui, |ui| editor.status_bar(ui));
+                // A gray backdrop in light mode so white edges of the snip show.
+                let backdrop =
+                    if ui.visuals().dark_mode { ui.visuals().extreme_bg_color } else { Color32::from_gray(222) };
                 egui::CentralPanel::default()
-                    .frame(egui::Frame::new().fill(ui.visuals().extreme_bg_color))
+                    .frame(egui::Frame::new().fill(backdrop))
                     .show(ui, |ui| editor.canvas(ui));
             }
             _ => {

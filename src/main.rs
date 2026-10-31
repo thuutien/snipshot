@@ -6,6 +6,7 @@ mod overlay;
 mod raise;
 mod raster;
 mod settings;
+mod style;
 mod text;
 mod updater;
 
@@ -65,8 +66,8 @@ fn main() -> eframe::Result {
         // Inside a Flatpak the app id must match the exported desktop file so
         // docks and window lists show the right icon.
         .with_app_id(std::env::var("FLATPAK_ID").unwrap_or_else(|_| "snipshot".to_owned()))
-        .with_inner_size([600.0, 210.0])
-        .with_min_inner_size([520.0, 180.0])
+        .with_inner_size([700.0, 240.0])
+        .with_min_inner_size([620.0, 210.0])
         .with_icon(app_icon());
 
     // From the command line, capture before opening any window so the
@@ -95,7 +96,9 @@ fn main() -> eframe::Result {
     eframe::run_native("Snipshot", options, Box::new(move |cc| {
         text::register_font(&cc.egui_ctx);
         let window_id = raise::x11_window_id(cc);
-        Ok(Box::new(SnipApp::new(start, delay, window_id)))
+        let app = SnipApp::new(start, delay, window_id);
+        style::apply(&cc.egui_ctx, app.theme());
+        Ok(Box::new(app))
     }))
 }
 

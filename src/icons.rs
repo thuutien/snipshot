@@ -46,7 +46,7 @@ pub fn button_ex(
     tooltip: &str,
 ) -> Response {
     let sense = if enabled { Sense::click() } else { Sense::hover() };
-    let (rect, response) = ui.allocate_exact_size(vec2(34.0, 30.0), sense);
+    let (rect, response) = ui.allocate_exact_size(vec2(40.0, 36.0), sense);
     if ui.is_rect_visible(rect) {
         let visuals = ui.visuals();
         let bg = if selected {
@@ -58,14 +58,14 @@ pub fn button_ex(
         };
         ui.painter().rect_filled(rect, 6.0, bg);
         let color = if enabled { visuals.strong_text_color() } else { visuals.weak_text_color() };
-        paint(ui.painter(), icon, Rect::from_center_size(rect.center(), vec2(18.0, 18.0)), color, accent);
+        paint(ui.painter(), icon, Rect::from_center_size(rect.center(), vec2(21.0, 21.0)), color, accent);
     }
     response.on_hover_text(tooltip)
 }
 
 pub fn paint(painter: &Painter, icon: Icon, r: Rect, color: Color32, accent: Option<Color32>) {
     let p = |x: f32, y: f32| pos2(r.left() + x * r.width(), r.top() + y * r.height());
-    let s = Stroke::new(1.6, color);
+    let s = Stroke::new(1.8, color);
     let line = |pts: &[(f32, f32)], stroke: Stroke| {
         painter.add(Shape::line(pts.iter().map(|&(x, y)| p(x, y)).collect(), stroke));
     };

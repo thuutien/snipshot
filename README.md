@@ -15,6 +15,7 @@
 - **Snip modes:** rectangle, window, full screen, freeform
 - **Delay:** none, 3, 5 or 10 seconds
 - **Markup:** ballpoint pen and highlighter (with color palette and size), shapes (rectangle, oval, line, arrow; hold Shift for squares, circles and 15° angles), text labels (click to type, click to edit, drag to move), eraser, image crop, undo/redo, zoom
+- **Look:** large, easy-to-read controls, and a Light, Dark or System theme (in the `•••` menu)
 - **Output:** copies the snip to the clipboard and saves it to `~/Pictures/Screenshots` automatically (both can be turned off in the `•••` menu). Ctrl+S saves as PNG or JPEG.
 
 ## Build and run

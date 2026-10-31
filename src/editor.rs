@@ -243,8 +243,8 @@ impl Editor {
     pub fn preferred_window_size(&self, ctx: &egui::Context) -> Vec2 {
         let ppp = ctx.pixels_per_point();
         let monitor = ctx.input(|i| i.viewport().monitor_size).unwrap_or(vec2(1920.0, 1080.0));
-        let wanted = self.doc.crop.size() / ppp + vec2(48.0, 150.0);
-        wanted.max(vec2(860.0, 460.0)).min(monitor * 0.85)
+        let wanted = self.doc.crop.size() / ppp + vec2(48.0, 175.0);
+        wanted.max(vec2(1000.0, 520.0)).min(monitor * 0.85)
     }
 
     pub fn set_status(&mut self, text: impl Into<String>) {
@@ -367,7 +367,7 @@ impl Editor {
     /// The second toolbar row with options for the current tool.
     pub fn options_bar(&mut self, ui: &mut Ui) {
         ui.horizontal(|ui| {
-            ui.set_min_height(30.0);
+            ui.set_min_height(36.0);
             match self.tool {
                 Tool::Pen | Tool::Highlighter => {
                     let (style, palette, range) = if self.tool == Tool::Pen {
@@ -925,16 +925,16 @@ fn paint_stroke(painter: &Painter, stroke: &InkStroke, to_screen: impl Fn(Pos2) 
 }
 
 fn swatch(ui: &mut Ui, color: Color32, selected: bool) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(vec2(24.0, 24.0), Sense::click());
+    let (rect, response) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
     let painter = ui.painter();
     let c = rect.center();
     if selected {
-        painter.circle_stroke(c, 11.0, Stroke::new(2.0, ACCENT));
+        painter.circle_stroke(c, 13.0, Stroke::new(2.0, ACCENT));
     } else if response.hovered() {
-        painter.circle_stroke(c, 11.0, Stroke::new(1.0, ui.visuals().weak_text_color()));
+        painter.circle_stroke(c, 13.0, Stroke::new(1.0, ui.visuals().weak_text_color()));
     }
-    painter.circle_filled(c, 8.0, color);
-    painter.circle_stroke(c, 8.0, Stroke::new(1.0, Color32::from_gray(128)));
+    painter.circle_filled(c, 10.0, color);
+    painter.circle_stroke(c, 10.0, Stroke::new(1.0, Color32::from_gray(128)));
     response
 }
 
