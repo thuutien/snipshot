@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/snipshot-256.png" alt="Snipshot icon" width="112">
+  <img src="assets/snipshot.svg" alt="Snipshot icon" width="112">
 </p>
 
 <h1 align="center">Snipshot</h1>
