@@ -19,7 +19,7 @@ use crate::overlay::{ACCENT, Outcome, Overlay};
 use crate::raise;
 use crate::settings::{Settings, Theme};
 use crate::style;
-use crate::updater::{self, UpdateStatus};
+use crate::updater::{self, Install, Progress, UpdateStatus};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SnipMode {
@@ -89,6 +89,10 @@ pub struct SnipApp {
     /// The user started the check, so show "up to date" and errors too.
     update_check_is_manual: bool,
     update_banner_closed: bool,
+    /// How this copy is installed, once an update has been started.
+    install: Option<Install>,
+    install_rx: Option<Receiver<Progress>>,
+    install_progress: Option<Progress>,
     /// The automatic check runs on the first frame, once a context exists.
     startup_check_pending: bool,
     /// Our X11 window, for bringing the editor to the front.
@@ -113,6 +117,9 @@ impl SnipApp {
             update: None,
             update_check_is_manual: false,
             update_banner_closed: false,
+            install: None,
+            install_rx: None,
+            install_progress: None,
             startup_check_pending: true,
             window_id,
             raise: None,
@@ -219,38 +226,132 @@ impl SnipApp {
         }
     }
 
-    /// A strip under the toolbar announcing an update, or the result of a
-    /// manual check (the menu closes when its button is clicked).
-    fn update_banner(&mut self, ui: &mut Ui) {
-        let Some(status) = self.update.clone() else { return };
-        if self.update_banner_closed {
+    /// Downloads and installs the available update in the background.
+    fn start_update(&mut self, ctx: &egui::Context) {
+        let Some(UpdateStatus::Available { assets, .. }) = &self.update else { return };
+        if self.install_rx.is_some() {
             return;
         }
-        let (tint, message) = match &status {
-            UpdateStatus::Available { version, .. } => (ACCENT, format!("Snipshot {version} is available")),
-            UpdateStatus::UpToDate => {
-                (Color32::from_rgb(16, 124, 16), format!("You're on the latest version ({})", updater::current_version()))
+        self.update_banner_closed = false;
+        match Install::detect() {
+            Ok(install) => {
+                self.install_rx = Some(updater::spawn_install(ctx, install.clone(), assets.clone()));
+                self.install = Some(install);
+                self.install_progress = Some(Progress::Downloading(0.0));
             }
-            UpdateStatus::Failed(e) => (Color32::from_rgb(200, 120, 0), format!("Couldn't check for updates: {e}")),
+            Err(e) => self.install_progress = Some(Progress::Failed(e)),
+        }
+    }
+
+    fn poll_install(&mut self) {
+        let Some(rx) = &self.install_rx else { return };
+        loop {
+            match rx.try_recv() {
+                Ok(progress) => self.install_progress = Some(progress),
+                Err(TryRecvError::Empty) => return,
+                Err(TryRecvError::Disconnected) => break,
+            }
+        }
+        self.install_rx = None;
+        if !matches!(self.install_progress, Some(Progress::Done | Progress::Failed(_))) {
+            self.install_progress = Some(Progress::Failed("The update stopped unexpectedly".to_owned()));
+        }
+    }
+
+    /// Starts the updated copy and closes this one.
+    fn relaunch(&mut self, ctx: &egui::Context) {
+        let Some(install) = &self.install else { return };
+        match install.relaunch() {
+            Ok(()) => ctx.send_viewport_cmd(ViewportCommand::Close),
+            Err(e) => self.install_progress = Some(Progress::Failed(e)),
+        }
+    }
+
+    /// A strip under the toolbar announcing an update and its install
+    /// progress, or the result of a manual check (the menu closes when its
+    /// button is clicked).
+    fn update_banner(&mut self, ui: &mut Ui) {
+        let Some(status) = self.update.clone() else { return };
+        let busy = self.install_rx.is_some();
+        if self.update_banner_closed && !busy {
+            return;
+        }
+        let (green, orange) = (Color32::from_rgb(16, 124, 16), Color32::from_rgb(200, 120, 0));
+        let tint = match (&status, &self.install_progress) {
+            (UpdateStatus::Failed(_), _) | (_, Some(Progress::Failed(_))) => orange,
+            (UpdateStatus::UpToDate, _) | (_, Some(Progress::Done)) => green,
+            _ => ACCENT,
         };
+        let (mut start, mut relaunch) = (false, false);
+        // A light wash of the tint over the panel color, so text stays
+        // readable in both the light and dark themes.
+        let fill = ui.visuals().panel_fill.lerp_to_gamma(tint, 0.25);
         egui::Panel::top("update-banner")
-            .frame(egui::Frame::new().fill(tint.gamma_multiply(0.3)).inner_margin(egui::Margin::symmetric(10, 6)))
+            .frame(egui::Frame::new().fill(fill).inner_margin(egui::Margin::symmetric(10, 6)))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(message).strong());
-                    if let UpdateStatus::Available { url, .. } = &status {
-                        ui.label(RichText::new(format!("(you have {})", updater::current_version())).weak());
-                        if ui.button("Download").clicked() {
-                            updater::open_url(url);
+                    match &status {
+                        UpdateStatus::UpToDate => {
+                            ui.label(
+                                RichText::new(format!("You're on the latest version ({})", updater::current_version()))
+                                    .strong(),
+                            );
                         }
+                        UpdateStatus::Failed(e) => {
+                            ui.label(RichText::new(format!("Couldn't check for updates: {e}")).strong());
+                        }
+                        UpdateStatus::Available { version, url, .. } => match &self.install_progress {
+                            None => {
+                                ui.label(RichText::new(format!("Snipshot {version} is available")).strong());
+                                ui.label(RichText::new(format!("(you have {})", updater::current_version())).weak());
+                                start = ui.button("Update now").clicked();
+                                if ui.link("What's new").clicked() {
+                                    updater::open_url(url);
+                                }
+                            }
+                            Some(Progress::Downloading(fraction)) => {
+                                ui.label(RichText::new(format!("Downloading Snipshot {version}…")).strong());
+                                ui.add(egui::ProgressBar::new(*fraction).desired_width(220.0).show_percentage());
+                            }
+                            Some(Progress::Installing) => {
+                                ui.spinner();
+                                ui.label(RichText::new(format!("Installing Snipshot {version}…")).strong());
+                                if self.install.as_ref().is_some_and(Install::asks_for_password) {
+                                    ui.label(RichText::new("Enter your password if asked.").weak());
+                                }
+                            }
+                            Some(Progress::Done) => {
+                                ui.label(RichText::new(format!("Snipshot {version} is installed.")).strong());
+                                relaunch = ui
+                                    .button("Restart now")
+                                    .on_hover_text("Unsaved markup in the current snip will be lost")
+                                    .clicked();
+                            }
+                            Some(Progress::Failed(e)) => {
+                                ui.label(RichText::new(format!("Couldn't update: {e}")).strong());
+                                start = ui.button("Try again").clicked();
+                                if ui.link("Download page").clicked() {
+                                    updater::open_url(url);
+                                }
+                            }
+                        },
                     }
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        if ui.small_button("×").on_hover_text("Dismiss").clicked() {
-                            self.update_banner_closed = true;
-                        }
-                    });
+                    if !busy {
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if ui.small_button("×").on_hover_text("Dismiss").clicked() {
+                                self.update_banner_closed = true;
+                            }
+                        });
+                    }
                 });
             });
+        if start {
+            self.install_progress = None;
+            self.start_update(ui.ctx());
+        }
+        if relaunch {
+            self.relaunch(ui.ctx());
+        }
     }
 
     fn cancel(&mut self, ctx: &egui::Context) {
@@ -443,15 +544,16 @@ impl SnipApp {
                     ui.spinner();
                 }
             });
+            let mut start_update = false;
             match &self.update {
                 Some(UpdateStatus::UpToDate) => {
                     ui.label("You're on the latest version.");
                 }
-                Some(UpdateStatus::Available { version, url }) => {
+                Some(UpdateStatus::Available { version, .. }) => {
                     ui.horizontal(|ui| {
                         ui.label(format!("Version {version} is available."));
-                        if ui.link("Download").clicked() {
-                            updater::open_url(url);
+                        if self.install_progress.is_none() {
+                            start_update = ui.button("Update now").clicked();
                         }
                     });
                 }
@@ -459,6 +561,11 @@ impl SnipApp {
                     ui.colored_label(ui.visuals().warn_fg_color, e);
                 }
                 None => {}
+            }
+            if start_update {
+                // Progress shows in the banner.
+                self.start_update(ui.ctx());
+                ui.close();
             }
             if changed && let Err(e) = self.settings.save() {
                 self.error = Some(format!("Couldn't save settings: {e}"));
@@ -488,6 +595,7 @@ impl eframe::App for SnipApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_capture(ctx);
         self.poll_update();
+        self.poll_install();
         self.maybe_check_on_startup(ctx);
     }
 

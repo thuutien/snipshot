@@ -69,7 +69,19 @@ packaging/install.sh
 
 ## Updates
 
-Snipshot checks GitHub releases of the repository in `Cargo.toml` (`repository = ...`) at most once a day, and shows a banner when a newer version is published. Turn it off, or check by hand, in the `•••` menu. To publish an update, bump `version` in `Cargo.toml` and create a GitHub release tagged like `v0.2.0`. To update, download and install the new package the same way as the first time.
+Snipshot checks GitHub releases of the repository in `Cargo.toml` (`repository = ...`) at most once a day, and shows a banner when a newer version is published. Turn it off, or check by hand, in the `•••` menu.
+
+Click **Update now** to download and install the update without leaving the app, then **Restart now** to switch to it. The download is checked against the release's `SHA256SUMS` before anything is installed. How it installs depends on how you installed Snipshot:
+
+| Installed from | How the update is installed |
+|---|---|
+| Tarball (`install.sh`) | The `snipshot` program is replaced in place |
+| `.deb` | `apt-get` through `pkexec`, which asks for your password |
+| Flatpak | `flatpak install` on the host (this is why the Flatpak has permission to talk to Flatpak) |
+
+A copy built from source isn't updated by the app; use `git pull` and `cargo build` instead.
+
+To publish an update, bump `version` in `Cargo.toml`, run `packaging/build-packages.sh`, and create a GitHub release tagged like `v0.2.0` with the files from `dist/`, including `SHA256SUMS`.
 
 ## Keyboard shortcuts
 
@@ -101,8 +113,9 @@ Snipshot checks GitHub releases of the repository in `Cargo.toml` (`repository =
 | `src/editor.rs` | Markup editor: tools, crop, undo, zoom |
 | `src/raster.rs` | Burns ink strokes into the saved image |
 | `src/text.rs` | Text labels: on-screen drawing and burning into the image |
-| `src/updater.rs` | Checks GitHub for a newer release |
+| `src/updater.rs` | Checks GitHub for a newer release, then downloads, verifies and installs it |
 | `src/icons.rs` | Toolbar icons drawn in code |
+| `src/style.rs` | Text and control sizes, light/dark theme |
 | `src/settings.rs` | Settings in `~/.config/snipshot/settings.conf` |
 | `assets/` | App icon (SVG source and 256 px PNG) |
 | `packaging/` | Desktop entry, AppStream metadata, install script, package builder |

@@ -67,7 +67,8 @@ install -Dm644 "packaging/$app_id.metainfo.xml" "$fp/files/share/metainfo/$app_i
 flatpak build-finish "$fp" --command=snipshot \
   --share=ipc --share=network \
   --socket=wayland --socket=fallback-x11 --device=dri \
-  --filesystem=xdg-pictures >/dev/null
+  --filesystem=xdg-pictures \
+  --talk-name=org.freedesktop.Flatpak >/dev/null
 flatpak build-export "$work/repo" "$fp" stable >/dev/null
 flatpak build-bundle --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo \
   "$work/repo" "dist/snipshot-$version-x86_64.flatpak" "$app_id" stable
