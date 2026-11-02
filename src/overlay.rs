@@ -79,9 +79,10 @@ impl Overlay {
 
         let screen = ui.max_rect();
         let (w, h) = self.capture.image.dimensions();
-        let (sx, sy) = (w as f32 / screen.width(), h as f32 / screen.height());
-        let to_px = |p: Pos2| pos2((p.x - screen.min.x) * sx, (p.y - screen.min.y) * sy);
-        let to_pt = |p: Pos2| pos2(screen.min.x + p.x / sx, screen.min.y + p.y / sy);
+        let shown = fit_image(screen, w, h);
+        let (sx, sy) = (w as f32 / shown.width(), h as f32 / shown.height());
+        let to_px = |p: Pos2| pos2((p.x - shown.min.x) * sx, (p.y - shown.min.y) * sy);
+        let to_pt = |p: Pos2| pos2(shown.min.x + p.x / sx, shown.min.y + p.y / sy);
 
         let response = ui.interact(screen, Id::unique("snip-surface"), Sense::click_and_drag());
         if response.hovered() || response.dragged() {
@@ -89,7 +90,10 @@ impl Overlay {
         }
         let press_origin = ui.input(|i| i.pointer.press_origin());
         let painter = ui.painter();
-        painter.image(self.texture.id(), screen, Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), Color32::WHITE);
+        if shown != screen {
+            painter.rect_filled(screen, 0.0, Color32::BLACK);
+        }
+        painter.image(self.texture.id(), shown, Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), Color32::WHITE);
 
         let window_snip = self.mode == SnipMode::Window && !self.capture.windows.is_empty();
         if window_snip {
@@ -174,6 +178,19 @@ impl Overlay {
 
         outcome
     }
+}
+
+/// Where to show a `w` × `h` capture on `screen`. Normally the capture is of
+/// this very monitor and fills it. On Wayland the portal returns all monitors
+/// in one image, so it is scaled down evenly and centered rather than squashed.
+fn fit_image(screen: Rect, w: u32, h: u32) -> Rect {
+    let size = vec2(w as f32, h as f32);
+    let aspect = |s: egui::Vec2| s.x / s.y;
+    if (aspect(size) / aspect(screen.size()) - 1.0).abs() < 0.01 {
+        return screen;
+    }
+    let scale = (screen.width() / size.x).min(screen.height() / size.y);
+    Rect::from_center_size(screen.center(), size * scale)
 }
 
 /// Dims everything on `screen` except `hole`.
@@ -268,6 +285,15 @@ mod tests {
     fn pixel_rect_normalizes_and_clamps() {
         let r = pixel_rect(pos2(50.5, 40.2), pos2(-10.0, 10.0), 100, 100);
         assert_eq!(r, IRect { x: 0, y: 10, w: 51, h: 30 });
+    }
+
+    #[test]
+    fn fit_image_fills_matching_screen_and_letterboxes_wide_capture() {
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(1920.0, 1080.0));
+        assert_eq!(fit_image(screen, 3840, 2160), screen);
+        // Two monitors side by side: half the height, centered vertically.
+        let shown = fit_image(screen, 3840, 1080);
+        assert_eq!(shown, Rect::from_min_max(pos2(0.0, 270.0), pos2(1920.0, 810.0)));
     }
 
     #[test]

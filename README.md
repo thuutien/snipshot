@@ -44,6 +44,12 @@ Download a package from the [latest release](https://github.com/thuutien/snipsho
 sudo apt install ./snipshot_*_amd64.deb
 ```
 
+**Fedora** (`.rpm`, needs Fedora 40+):
+
+```bash
+sudo dnf install ./snipshot-*.x86_64.rpm
+```
+
 **Any distro with Flatpak** (`.flatpak`; the Freedesktop runtime is fetched from Flathub if needed):
 
 ```bash
@@ -65,7 +71,7 @@ cargo build --release
 packaging/install.sh
 ```
 
-`SHA256SUMS` in each release lists the checksums of the files. To build all three packages yourself, run `packaging/build-packages.sh` (needs `dpkg-deb`, `flatpak` and the `org.freedesktop.Platform//25.08` runtime).
+`SHA256SUMS` in each release lists the checksums of the files. To build all four packages yourself, run `packaging/build-packages.sh` (needs `dpkg-deb`, `flatpak` and the `org.freedesktop.Platform//25.08` runtime).
 
 ## Updates
 
@@ -77,6 +83,7 @@ Click **Update now** to download and install the update without leaving the app,
 |---|---|
 | Tarball (`install.sh`) | The `snipshot` program is replaced in place |
 | `.deb` | `apt-get` through `pkexec`, which asks for your password |
+| `.rpm` | `dnf` through `pkexec`, which asks for your password |
 | Flatpak | `flatpak install` on the host (this is why the Flatpak has permission to talk to Flatpak) |
 
 A copy built from source isn't updated by the app; use `git pull` and `cargo build` instead.

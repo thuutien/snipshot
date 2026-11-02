@@ -202,7 +202,8 @@ pub struct Editor {
     /// Points per image pixel; `None` fits the snip to the window.
     zoom: Option<f32>,
     fit_zoom: f32,
-    status: Option<(String, Instant)>,
+    /// Status bar message, when it was set, and whether it is an error.
+    status: Option<(String, Instant, bool)>,
 }
 
 impl Editor {
@@ -248,7 +249,12 @@ impl Editor {
     }
 
     pub fn set_status(&mut self, text: impl Into<String>) {
-        self.status = Some((text.into(), Instant::now()));
+        self.status = Some((text.into(), Instant::now(), false));
+    }
+
+    /// Like [`Self::set_status`], but in the error color and shown for longer.
+    pub fn set_error(&mut self, text: impl Into<String>) {
+        self.status = Some((text.into(), Instant::now(), true));
     }
 
     /// The snip with ink burned in and the crop applied.
@@ -366,7 +372,8 @@ impl Editor {
 
     /// The second toolbar row with options for the current tool.
     pub fn options_bar(&mut self, ui: &mut Ui) {
-        ui.horizontal(|ui| {
+        // Wraps onto a second line when the window is too narrow.
+        ui.horizontal_wrapped(|ui| {
             ui.set_min_height(36.0);
             match self.tool {
                 Tool::Pen | Tool::Highlighter => {
@@ -459,10 +466,15 @@ impl Editor {
             if ui.small_button("100%").clicked() {
                 self.zoom = Some(1.0 / ui.ctx().pixels_per_point());
             }
-            if let Some((text, at)) = &self.status {
-                if at.elapsed() < Duration::from_secs(4) {
+            if let Some((text, at, is_error)) = &self.status {
+                let shown_for = Duration::from_secs(if *is_error { 10 } else { 4 });
+                if at.elapsed() < shown_for {
                     ui.separator();
-                    ui.label(text);
+                    if *is_error {
+                        ui.colored_label(ui.visuals().error_fg_color, text);
+                    } else {
+                        ui.label(text);
+                    }
                     ui.ctx().request_repaint_after(Duration::from_millis(500));
                 } else {
                     self.status = None;
