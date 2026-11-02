@@ -4,6 +4,7 @@
   <name>Snipshot</name>
   <summary>Snip part of your screen and mark it up</summary>
   <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-only</project_license>
   <developer id="io.github.thuutien">
     <name>Bryan Tran</name>
   </developer>

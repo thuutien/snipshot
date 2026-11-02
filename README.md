@@ -127,3 +127,7 @@ To publish an update, bump `version` in `Cargo.toml`, run `packaging/build-packa
 | `assets/` | App icon (SVG source and 256 px PNG) |
 | `packaging/` | Desktop entry, AppStream metadata, install script, package builder |
 | `docs/` | README screenshot |
+
+## License
+
+Snipshot is free software under the [GNU General Public License v3.0](LICENSE) (GPL-3.0-only).
