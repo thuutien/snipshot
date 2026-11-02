@@ -68,6 +68,9 @@ fn main() -> eframe::Result {
         .with_app_id(std::env::var("FLATPAK_ID").unwrap_or_else(|_| "snipshot".to_owned()))
         .with_inner_size([700.0, 240.0])
         .with_min_inner_size([620.0, 210.0])
+        // Lets the window turn invisible while snipping on Wayland, where it
+        // can't be hidden.
+        .with_transparent(true)
         .with_icon(app_icon());
 
     // From the command line, capture before opening any window so the

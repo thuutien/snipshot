@@ -2,9 +2,10 @@
 # Builds the release packages into dist/:
 #   snipshot-<version>-x86_64-linux.tar.gz   binary + install script
 #   snipshot_<version>_amd64.deb             Debian/Ubuntu/Mint package
+#   snipshot-<version>-1.x86_64.rpm          Fedora package
 #   snipshot-<version>-x86_64.flatpak        Flatpak bundle (Freedesktop runtime)
 #   SHA256SUMS
-# Needs dpkg-deb, flatpak and the org.freedesktop.Platform//25.08 runtime:
+# Needs dpkg-deb, rpmbuild (Arch: rpm-tools), flatpak and the org.freedesktop.Platform//25.08 runtime:
 #   flatpak install --user flathub org.freedesktop.Platform//25.08
 set -eu
 cd "$(dirname "$0")/.."
@@ -53,6 +54,41 @@ Description: Snipping tool: snip part of your screen and mark it up
  then mark it up with pen, highlighter, shapes and text, and copy or save it.
 EOF
 dpkg-deb --root-owner-group --build "$deb" "dist/snipshot_${version}_amd64.deb" >/dev/null
+
+# --- .rpm --------------------------------------------------------------------
+# The same files as the .deb, already built; rpmbuild works out the library
+# dependencies from the binary.
+rpm="$work/rpm"
+mkdir -p "$rpm/SPECS"
+cat > "$rpm/SPECS/snipshot.spec" <<EOF
+%global debug_package %{nil}
+
+Name:           snipshot
+Version:        $version
+Release:        1
+Summary:        Snipping tool: snip part of your screen and mark it up
+License:        LicenseRef-Unspecified
+URL:            https://github.com/thuutien/snipshot
+Recommends:     xdg-desktop-portal, xdg-utils
+
+%description
+Snipshot is a snipping tool for Linux, modeled on the Windows Snipping
+Tool. Snip a rectangle, a window, a freeform shape or the whole screen,
+then mark it up with pen, highlighter, shapes and text, and copy or save it.
+
+%install
+mkdir -p %{buildroot}
+cp -a "$deb/usr" %{buildroot}/
+
+%files
+/usr/bin/snipshot
+/usr/share/applications/snipshot.desktop
+/usr/share/icons/hicolor/scalable/apps/snipshot.svg
+/usr/share/icons/hicolor/256x256/apps/snipshot.png
+%doc /usr/share/doc/snipshot/README.md
+EOF
+rpmbuild --quiet --define "_topdir $rpm" -bb "$rpm/SPECS/snipshot.spec"
+cp "$rpm/RPMS/x86_64/snipshot-$version-1.x86_64.rpm" dist/
 
 # --- Flatpak -----------------------------------------------------------------
 fp="$work/flatpak"

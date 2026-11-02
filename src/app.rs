@@ -99,6 +99,9 @@ pub struct SnipApp {
     window_id: Option<u32>,
     /// Remaining attempts to raise the window, and when to make the next one.
     raise: Option<(u8, Instant)>,
+    /// The size we asked for, remaining attempts, and when to check next.
+    /// Coming out of full screen, the compositor may put back the old size.
+    resize: Option<(Vec2, u8, Instant)>,
 }
 
 impl SnipApp {
@@ -123,6 +126,7 @@ impl SnipApp {
             startup_check_pending: true,
             window_id,
             raise: None,
+            resize: None,
         };
         if let Some((mode, capture)) = start {
             app.mode = mode;
@@ -148,6 +152,10 @@ impl SnipApp {
         self.screen = Screen::Waiting;
         self.error = None;
         ctx.send_viewport_cmd(ViewportCommand::Visible(false));
+        // Wayland ignores hiding a window, so also drop the title bar and draw
+        // nothing at all (see `clear_color`) to keep the window out of the snip.
+        ctx.send_viewport_cmd(ViewportCommand::Decorations(false));
+        ctx.request_repaint();
 
         let (tx, rx) = mpsc::channel();
         let ctx = ctx.clone();
@@ -354,18 +362,31 @@ impl SnipApp {
         }
     }
 
+    /// Shows an error where the user will see it: the editor's status bar,
+    /// or the home screen.
+    fn show_error(&mut self, error: String) {
+        match &mut self.screen {
+            Screen::Editor(editor) => editor.set_error(error),
+            _ => self.error = Some(error),
+        }
+    }
+
     fn cancel(&mut self, ctx: &egui::Context) {
         if self.exit_on_cancel {
             ctx.send_viewport_cmd(ViewportCommand::Close);
             return;
         }
         self.screen = match self.previous_editor.take() {
-            Some(editor) => {
-                show_normal_window(ctx, editor.preferred_window_size(ctx));
+            Some(mut editor) => {
+                // The home screen isn't showing, so the editor reports the error.
+                if let Some(error) = self.error.take() {
+                    editor.set_error(error);
+                }
+                self.show_normal(ctx, editor.preferred_window_size(ctx));
                 Screen::Editor(editor)
             }
             None => {
-                show_normal_window(ctx, HOME_SIZE);
+                self.show_normal(ctx, HOME_SIZE);
                 Screen::Home
             }
         };
@@ -390,11 +411,35 @@ impl SnipApp {
         }
         let mut editor = Editor::new(ctx, image);
         editor.set_status(notes.join(" · "));
-        show_normal_window(ctx, editor.preferred_window_size(ctx));
+        self.show_normal(ctx, editor.preferred_window_size(ctx));
         self.screen = Screen::Editor(editor);
         // The window manager applies the size and mapping over a few frames,
         // so ask to be raised a few times while that settles.
         self.raise = Some((3, Instant::now() + Duration::from_millis(120)));
+    }
+
+    /// Leaves full screen at `size`, and keeps asking for that size until the
+    /// window has it.
+    fn show_normal(&mut self, ctx: &egui::Context, size: Vec2) {
+        show_normal_window(ctx, size);
+        self.resize = Some((size, 8, Instant::now() + Duration::from_millis(150)));
+    }
+
+    fn keep_size(&mut self, ctx: &egui::Context) {
+        let Some((size, attempts, at)) = self.resize else { return };
+        let now = Instant::now();
+        if now < at {
+            ctx.request_repaint_after(at - now);
+            return;
+        }
+        let current = ctx.input(|i| i.viewport().inner_rect).map(|r| r.size());
+        if attempts == 0 || current.is_some_and(|c| (c - size).length() < 2.0) {
+            self.resize = None;
+            return;
+        }
+        ctx.send_viewport_cmd(ViewportCommand::InnerSize(size));
+        self.resize = Some((size, attempts - 1, now + Duration::from_millis(150)));
+        ctx.request_repaint_after(Duration::from_millis(150));
     }
 
     fn raise_window(&mut self, ctx: &egui::Context) {
@@ -463,49 +508,59 @@ impl SnipApp {
     fn toolbar(&mut self, ui: &mut Ui) -> (bool, Option<Action>) {
         let mut new_snip = false;
         let mut action = None;
-        ui.horizontal(|ui| {
+        // The settings and action buttons go on the right first, so they always
+        // stay reachable; the rest scrolls sideways if the window is too narrow.
+        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             ui.set_min_height(40.0);
-            let new = Button::new(RichText::new("+  New").color(Color32::WHITE).strong())
-                .fill(ACCENT)
-                .min_size(vec2(88.0, 36.0))
-                .corner_radius(6);
-            if ui.add(new).on_hover_text("New snip (Ctrl+N)").clicked() {
-                new_snip = true;
-            }
-            egui::ComboBox::from_id_salt("snip-mode")
-                .selected_text(self.mode.label())
-                .width(130.0)
-                .show_ui(ui, |ui| {
-                    for mode in SnipMode::ALL {
-                        ui.selectable_value(&mut self.mode, mode, mode.label());
-                    }
-                })
-                .response
-                .on_hover_text("Snip mode");
-            egui::ComboBox::from_id_salt("snip-delay")
-                .selected_text(delay_label(self.delay))
-                .width(115.0)
-                .show_ui(ui, |ui| {
-                    for delay in DELAYS {
-                        ui.selectable_value(&mut self.delay, delay, delay_label(delay));
-                    }
-                })
-                .response
-                .on_hover_text("Delay before the snip");
-
+            self.settings_menu(ui);
             if let Screen::Editor(editor) = &mut self.screen {
-                ui.separator();
-                editor.tools(ui);
+                action = editor.actions(ui);
             }
-
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                self.settings_menu(ui);
-                if let Screen::Editor(editor) = &mut self.screen {
-                    action = editor.actions(ui);
-                }
+            egui::ScrollArea::horizontal().id_salt("toolbar-scroll").auto_shrink([false, true]).show(ui, |ui| {
+                ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                    new_snip = self.toolbar_left(ui);
+                });
             });
         });
         (new_snip, action)
+    }
+
+    /// New, snip mode, delay and (in the editor) the markup tools.
+    fn toolbar_left(&mut self, ui: &mut Ui) -> bool {
+        let mut new_snip = false;
+        let new = Button::new(RichText::new("+  New").color(Color32::WHITE).strong())
+            .fill(ACCENT)
+            .min_size(vec2(88.0, 36.0))
+            .corner_radius(6);
+        if ui.add(new).on_hover_text("New snip (Ctrl+N)").clicked() {
+            new_snip = true;
+        }
+        egui::ComboBox::from_id_salt("snip-mode")
+            .selected_text(self.mode.label())
+            .width(130.0)
+            .show_ui(ui, |ui| {
+                for mode in SnipMode::ALL {
+                    ui.selectable_value(&mut self.mode, mode, mode.label());
+                }
+            })
+            .response
+            .on_hover_text("Snip mode");
+        egui::ComboBox::from_id_salt("snip-delay")
+            .selected_text(delay_label(self.delay))
+            .width(115.0)
+            .show_ui(ui, |ui| {
+                for delay in DELAYS {
+                    ui.selectable_value(&mut self.delay, delay, delay_label(delay));
+                }
+            })
+            .response
+            .on_hover_text("Delay before the snip");
+
+        if let Screen::Editor(editor) = &mut self.screen {
+            ui.separator();
+            editor.tools(ui);
+        }
+        new_snip
     }
 
     fn settings_menu(&mut self, ui: &mut Ui) {
@@ -568,7 +623,7 @@ impl SnipApp {
                 ui.close();
             }
             if changed && let Err(e) = self.settings.save() {
-                self.error = Some(format!("Couldn't save settings: {e}"));
+                self.show_error(format!("Couldn't save settings: {e}"));
             }
         })
         .response
@@ -592,6 +647,11 @@ impl SnipApp {
 }
 
 impl eframe::App for SnipApp {
+    /// Fully transparent while waiting for a capture, opaque otherwise.
+    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+        if matches!(self.screen, Screen::Waiting) { [0.0; 4] } else { visuals.panel_fill.to_normalized_gamma_f32() }
+    }
+
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_capture(ctx);
         self.poll_update();
@@ -626,6 +686,7 @@ impl eframe::App for SnipApp {
             return;
         }
 
+        self.keep_size(&ctx);
         self.raise_window(&ctx);
         let mut action = None;
         let mut new_snip = ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::N)));
