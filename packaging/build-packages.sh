@@ -24,7 +24,7 @@ trap 'rm -rf "$work"' EXIT
 # --- tarball -----------------------------------------------------------------
 name="snipshot-$version-x86_64-linux"
 mkdir -p "$work/$name/packaging"
-cp target/release/snipshot README.md "$work/$name/"
+cp target/release/snipshot README.md LICENSE "$work/$name/"
 cp -r assets "$work/$name/"
 cp packaging/install.sh packaging/snipshot.desktop "$work/$name/packaging/"
 tar -C "$work" -czf "dist/$name.tar.gz" "$name"
@@ -36,6 +36,7 @@ install -Dm644 packaging/snipshot.desktop "$deb/usr/share/applications/snipshot.
 install -Dm644 assets/snipshot.svg "$deb/usr/share/icons/hicolor/scalable/apps/snipshot.svg"
 install -Dm644 assets/snipshot-256.png "$deb/usr/share/icons/hicolor/256x256/apps/snipshot.png"
 install -Dm644 README.md "$deb/usr/share/doc/snipshot/README.md"
+install -Dm644 LICENSE "$deb/usr/share/doc/snipshot/copyright"
 mkdir -p "$deb/DEBIAN"
 cat > "$deb/DEBIAN/control" <<EOF
 Package: snipshot
@@ -67,7 +68,7 @@ Name:           snipshot
 Version:        $version
 Release:        1
 Summary:        Snipping tool: snip part of your screen and mark it up
-License:        LicenseRef-Unspecified
+License:        GPL-3.0-only
 URL:            https://github.com/thuutien/snipshot
 Recommends:     xdg-desktop-portal, xdg-utils
 
@@ -86,6 +87,7 @@ cp -a "$deb/usr" %{buildroot}/
 /usr/share/icons/hicolor/scalable/apps/snipshot.svg
 /usr/share/icons/hicolor/256x256/apps/snipshot.png
 %doc /usr/share/doc/snipshot/README.md
+%license /usr/share/doc/snipshot/copyright
 EOF
 rpmbuild --quiet --define "_topdir $rpm" -bb "$rpm/SPECS/snipshot.spec"
 cp "$rpm/RPMS/x86_64/snipshot-$version-1.x86_64.rpm" dist/
