@@ -5,8 +5,18 @@ use image::RgbaImage;
 
 use crate::editor::{HIGHLIGHTER_OPACITY, Ink, InkStroke};
 
-pub fn draw_stroke(image: &mut RgbaImage, stroke: &InkStroke) {
-    let (w, h) = image.dimensions();
+/// How much of each pixel in a box around a stroke the stroke covers, 0 to 1.
+pub struct Coverage {
+    pub x0: u32,
+    pub y0: u32,
+    pub width: u32,
+    pub height: u32,
+    pub values: Vec<f32>,
+}
+
+/// Coverage of `stroke` on an image of `w` by `h` pixels, or `None` when the
+/// stroke is entirely outside it.
+pub fn coverage(stroke: &InkStroke, w: u32, h: u32) -> Option<Coverage> {
     let radius = stroke.width / 2.0;
     let pad = radius + 1.0;
 
@@ -20,48 +30,65 @@ pub fn draw_stroke(image: &mut RgbaImage, stroke: &InkStroke) {
     let x1 = ((max.x + pad).ceil() as u32).min(w);
     let y1 = ((max.y + pad).ceil() as u32).min(h);
     if x0 >= x1 || y0 >= y1 {
-        return;
+        return None;
     }
 
-    // Coverage is accumulated with max() so overlapping segments don't
-    // darken a translucent highlighter stroke.
-    let bw = (x1 - x0) as usize;
-    let mut coverage = vec![0f32; bw * (y1 - y0) as usize];
+    let mut cov = Coverage { x0, y0, width: x1 - x0, height: y1 - y0, values: vec![0.0; ((x1 - x0) * (y1 - y0)) as usize] };
     let first = [stroke.points[0], stroke.points[0]];
     let segments = if stroke.points.len() == 1 { &first[..] } else { &stroke.points[..] };
     for seg in segments.windows(2) {
-        let (a, b) = (seg[0], seg[1]);
-        let sx0 = ((a.x.min(b.x) - pad).floor().max(x0 as f32)) as u32;
-        let sy0 = ((a.y.min(b.y) - pad).floor().max(y0 as f32)) as u32;
-        let sx1 = ((a.x.max(b.x) + pad).ceil() as u32).min(x1);
-        let sy1 = ((a.y.max(b.y) + pad).ceil() as u32).min(y1);
+        cov.add_segment(seg[0], seg[1], radius);
+    }
+    Some(cov)
+}
+
+impl Coverage {
+    /// Adds the segment from `a` to `b` with round ends, and returns the
+    /// pixels it touched as (x0, y0, x1, y1), or `None` when it missed.
+    ///
+    /// Coverage is accumulated with max() so overlapping segments don't
+    /// darken a translucent highlighter stroke.
+    pub fn add_segment(&mut self, a: Pos2, b: Pos2, radius: f32) -> Option<(u32, u32, u32, u32)> {
+        let pad = radius + 1.0;
+        let (x1, y1) = (self.x0 + self.width, self.y0 + self.height);
+        let sx0 = ((a.x.min(b.x) - pad).floor().max(self.x0 as f32)) as u32;
+        let sy0 = ((a.y.min(b.y) - pad).floor().max(self.y0 as f32)) as u32;
+        let sx1 = ((a.x.max(b.x) + pad).ceil().max(0.0) as u32).min(x1);
+        let sy1 = ((a.y.max(b.y) + pad).ceil().max(0.0) as u32).min(y1);
+        if sx0 >= sx1 || sy0 >= sy1 {
+            return None;
+        }
         for y in sy0..sy1 {
             for x in sx0..sx1 {
                 let d = distance_to_segment(pos2(x as f32 + 0.5, y as f32 + 0.5), a, b);
                 let c = (radius + 0.5 - d).clamp(0.0, 1.0);
-                let cell = &mut coverage[(y - y0) as usize * bw + (x - x0) as usize];
+                let cell = &mut self.values[((y - self.y0) * self.width + x - self.x0) as usize];
                 *cell = cell.max(c);
             }
         }
+        Some((sx0, sy0, sx1, sy1))
     }
+}
 
+pub fn draw_stroke(image: &mut RgbaImage, stroke: &InkStroke) {
+    let (w, h) = image.dimensions();
+    let Some(cov) = coverage(stroke, w, h) else { return };
     let opacity = match stroke.ink {
         Ink::Pen | Ink::Shape => 1.0,
         Ink::Highlighter => HIGHLIGHTER_OPACITY,
     };
     let [r, g, b, _] = stroke.color.to_array();
-    for y in y0..y1 {
-        for x in x0..x1 {
-            let a = coverage[(y - y0) as usize * bw + (x - x0) as usize] * opacity;
-            if a <= 0.0 {
-                continue;
-            }
-            let px = image.get_pixel_mut(x, y);
-            for (dst, src) in px.0.iter_mut().zip([r, g, b]) {
-                *dst = (*dst as f32 * (1.0 - a) + src as f32 * a).round() as u8;
-            }
-            px.0[3] = 255;
+    for (i, &c) in cov.values.iter().enumerate() {
+        let a = c * opacity;
+        if a <= 0.0 {
+            continue;
         }
+        let (x, y) = (cov.x0 + i as u32 % cov.width, cov.y0 + i as u32 / cov.width);
+        let px = image.get_pixel_mut(x, y);
+        for (dst, src) in px.0.iter_mut().zip([r, g, b]) {
+            *dst = (*dst as f32 * (1.0 - a) + src as f32 * a).round() as u8;
+        }
+        px.0[3] = 255;
     }
 }
 
@@ -82,7 +109,7 @@ mod tests {
     use image::Rgba;
 
     fn stroke(ink: Ink, points: Vec<Pos2>) -> InkStroke {
-        InkStroke { ink, color: Color32::from_rgb(255, 0, 0), width: 4.0, points }
+        InkStroke { ink, color: Color32::from_rgb(255, 0, 0), width: 4.0, points, mask: Default::default() }
     }
 
     #[test]

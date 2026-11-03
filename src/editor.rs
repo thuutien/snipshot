@@ -1,6 +1,7 @@
 //! The markup editor shown after a snip: pen, highlighter, eraser, crop,
 //! undo/redo and zoom.
 
+use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{
@@ -51,6 +52,19 @@ pub struct InkStroke {
     pub color: Color32,
     pub width: f32,
     pub points: Vec<Pos2>,
+    /// On-screen picture of a highlighter stroke.
+    pub mask: MaskCache,
+}
+
+/// A highlighter stroke as a texture, where it goes in image pixels, and how
+/// many points the stroke had when it was made.
+#[derive(Clone, Default)]
+pub struct MaskCache(RefCell<Option<(TextureHandle, Rect, usize)>>);
+
+impl std::fmt::Debug for MaskCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("MaskCache")
+    }
 }
 
 impl InkStroke {
@@ -195,6 +209,9 @@ pub struct Editor {
     editing_text: Option<EditingText>,
     moving_text: Option<usize>,
     drawing: Option<InkStroke>,
+    /// The highlighter stroke being drawn, kept up to date a segment at a
+    /// time; rebuilding it on every frame is too slow for long strokes.
+    live_highlight: Option<LiveHighlight>,
     shape_start: Option<Pos2>,
     erased_this_drag: bool,
     crop_draft: Rect,
@@ -226,6 +243,7 @@ impl Editor {
             editing_text: None,
             moving_text: None,
             drawing: None,
+            live_highlight: None,
             shape_start: None,
             erased_this_drag: false,
             crop_draft: full,
@@ -564,8 +582,28 @@ impl Editor {
             painter.image(self.texture.id(), image_rect, uv, Color32::WHITE);
 
             let ink_painter = painter.with_clip_rect(image_rect);
-            for stroke in self.doc.strokes.iter().chain(&self.drawing) {
-                paint_stroke(&ink_painter, stroke, to_screen, z);
+            let size = self.base.dimensions();
+            for stroke in &self.doc.strokes {
+                if stroke.ink == Ink::Highlighter {
+                    paint_highlighter(&ink_painter, stroke, size, to_screen);
+                } else {
+                    paint_stroke(&ink_painter, stroke, to_screen, z);
+                }
+            }
+            match &self.drawing {
+                Some(stroke) if stroke.ink == Ink::Highlighter => {
+                    let full = self.full_rect();
+                    if self.live_highlight.as_ref().is_some_and(|live| live.points > stroke.points.len()) {
+                        self.live_highlight = None;
+                    }
+                    let live = self.live_highlight.get_or_insert_with(|| LiveHighlight::new(ui.ctx(), size));
+                    live.update(stroke);
+                    let uv = Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0));
+                    let rect = Rect::from_min_max(to_screen(full.min), to_screen(full.max));
+                    ink_painter.image(live.texture.id(), rect, uv, Color32::WHITE);
+                }
+                Some(stroke) => paint_stroke(&ink_painter, stroke, to_screen, z),
+                None => self.live_highlight = None,
             }
             let editing_index = self.editing_text.as_ref().and_then(|e| e.index);
             for (i, mark) in self.doc.texts.iter().enumerate() {
@@ -620,7 +658,7 @@ impl Editor {
             _ => (Ink::Pen, &self.pen),
         };
         let (color, width) = (style.color, style.width);
-        let new_stroke = |start: Pos2| InkStroke { ink, color, width, points: vec![start] };
+        let new_stroke = |start: Pos2| InkStroke { ink, color, width, points: vec![start], mask: MaskCache::default() };
 
         if response.clicked()
             && let Some(p) = pointer
@@ -659,7 +697,13 @@ impl Editor {
         {
             let points = self.shape_kind.points(start, p, self.shape.width, shift);
             self.drawing =
-                Some(InkStroke { ink: Ink::Shape, color: self.shape.color, width: self.shape.width, points });
+                Some(InkStroke {
+                    ink: Ink::Shape,
+                    color: self.shape.color,
+                    width: self.shape.width,
+                    points,
+                    mask: MaskCache::default(),
+                });
         }
         if response.drag_stopped() {
             self.shape_start = None;
@@ -908,6 +952,68 @@ impl Editor {
     }
 }
 
+/// A highlighter stroke being drawn, as coverage of the whole image and a
+/// texture of the same size.
+struct LiveHighlight {
+    coverage: raster::Coverage,
+    texture: TextureHandle,
+    /// Points of the stroke already added.
+    points: usize,
+}
+
+impl LiveHighlight {
+    fn new(ctx: &egui::Context, (w, h): (u32, u32)) -> Self {
+        let coverage = raster::Coverage { x0: 0, y0: 0, width: w, height: h, values: vec![0.0; (w * h) as usize] };
+        let blank = egui::ColorImage::new([w as usize, h as usize], vec![Color32::TRANSPARENT; (w * h) as usize]);
+        let texture = ctx.load_texture("live-highlighter", blank, TextureOptions::LINEAR);
+        Self { coverage, texture, points: 0 }
+    }
+
+    /// Adds the stroke's new points and uploads the pixels they changed.
+    fn update(&mut self, stroke: &InkStroke) {
+        let radius = stroke.width / 2.0;
+        let [r, g, b, _] = stroke.color.to_array();
+        while self.points < stroke.points.len() {
+            let i = self.points;
+            let a = stroke.points[i.saturating_sub(1)];
+            self.points += 1;
+            let Some((x0, y0, x1, y1)) = self.coverage.add_segment(a, stroke.points[i], radius) else { continue };
+            let w = self.coverage.width;
+            let pixels: Vec<u8> = (y0..y1)
+                .flat_map(|y| (x0..x1).map(move |x| (y * w + x) as usize))
+                .flat_map(|i| [r, g, b, (self.coverage.values[i] * HIGHLIGHTER_OPACITY * 255.0).round() as u8])
+                .collect();
+            let size = [(x1 - x0) as usize, (y1 - y0) as usize];
+            let image = egui::ColorImage::from_rgba_unmultiplied(size, &pixels);
+            self.texture.set_partial([x0 as usize, y0 as usize], image, TextureOptions::LINEAR);
+        }
+    }
+}
+
+/// Paints a highlighter stroke the way it is burned into the image, so where
+/// the stroke crosses itself the color doesn't build up.
+fn paint_highlighter(painter: &Painter, stroke: &InkStroke, size: (u32, u32), to_screen: impl Fn(Pos2) -> Pos2) {
+    let mut cache = stroke.mask.0.borrow_mut();
+    if cache.as_ref().is_none_or(|(_, _, points)| *points != stroke.points.len()) {
+        *cache = raster::coverage(stroke, size.0, size.1).map(|cov| {
+            let [r, g, b, _] = stroke.color.to_array();
+            let pixels: Vec<u8> = cov
+                .values
+                .iter()
+                .flat_map(|&c| [r, g, b, (c * HIGHLIGHTER_OPACITY * 255.0).round() as u8])
+                .collect();
+            let image = egui::ColorImage::from_rgba_unmultiplied([cov.width as usize, cov.height as usize], &pixels);
+            let texture = painter.ctx().load_texture("highlighter", image, TextureOptions::LINEAR);
+            let min = pos2(cov.x0 as f32, cov.y0 as f32);
+            (texture, Rect::from_min_size(min, vec2(cov.width as f32, cov.height as f32)), stroke.points.len())
+        });
+    }
+    if let Some((texture, rect, _)) = cache.as_ref() {
+        let uv = Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0));
+        painter.image(texture.id(), Rect::from_min_max(to_screen(rect.min), to_screen(rect.max)), uv, Color32::WHITE);
+    }
+}
+
 fn paint_stroke(painter: &Painter, stroke: &InkStroke, to_screen: impl Fn(Pos2) -> Pos2, z: f32) {
     let color = stroke.display_color();
     let width = (stroke.width * z).max(1.0);
@@ -968,7 +1074,7 @@ mod tests {
         assert_eq!(arrow.len(), 5);
         assert_eq!(arrow[1], pos2(100.0, 0.0));
         assert!(arrow[2].x < 100.0 && arrow[4].x < 100.0);
-        let stroke = InkStroke { ink: Ink::Shape, color: Color32::RED, width: 4.0, points: arrow };
+        let stroke = InkStroke { ink: Ink::Shape, color: Color32::RED, width: 4.0, points: arrow, mask: MaskCache::default() };
         assert!(stroke.hit(pos2(50.0, 1.0), 2.0));
         assert!(!stroke.hit(pos2(50.0, 30.0), 2.0));
     }
