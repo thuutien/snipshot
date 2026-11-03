@@ -32,6 +32,9 @@
   </screenshots>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.1.6" date="2026-11-02">
+      <description><p>Taking another snip from the editor works again on Wayland, and the highlighter no longer turns blotchy where it overlaps itself.</p></description>
+    </release>
     <release version="0.1.5" date="2026-11-02">
       <description><p>The window stays out of your snips on Wayland, the editor opens at full size, the snip overlay isn't squashed across several monitors, the toolbars fit narrow windows, and errors show in the editor. New .rpm package for Fedora.</p></description>
     </release>

@@ -1,6 +1,6 @@
 [package]
 name = "snipshot"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 description = "A snipping tool for Linux: snip part of your screen and mark it up"
 repository = "https://github.com/thuutien/snipshot"
