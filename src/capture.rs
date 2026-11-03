@@ -203,13 +203,27 @@ mod x11 {
 mod wayland {
     use super::Capture;
     use ashpd::desktop::screenshot::Screenshot;
+    use std::sync::OnceLock;
+    use tokio::runtime::Runtime;
 
-    pub fn capture() -> Result<Capture, String> {
-        let runtime = tokio::runtime::Builder::new_current_thread()
+    /// ashpd keeps one D-Bus connection for the whole process, and its tasks
+    /// run on the runtime that opened it. A runtime per capture would leave
+    /// the second capture waiting forever on a dead connection.
+    fn runtime() -> Result<&'static Runtime, String> {
+        static RUNTIME: OnceLock<Runtime> = OnceLock::new();
+        if let Some(runtime) = RUNTIME.get() {
+            return Ok(runtime);
+        }
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
             .enable_all()
             .build()
             .map_err(|e| e.to_string())?;
-        let uri = runtime
+        Ok(RUNTIME.get_or_init(|| runtime))
+    }
+
+    pub fn capture() -> Result<Capture, String> {
+        let uri = runtime()?
             .block_on(async {
                 let request = Screenshot::request().interactive(false).modal(false).send().await?;
                 Ok::<_, ashpd::Error>(request.response()?.uri().as_str().to_owned())
